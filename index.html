@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Excel解析器 - 专业数据处理工具</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <header class="header">
+      <div class="header-content">
+        <div class="logo">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+            <path d="M2 17l10 5 10-5"/>
+            <path d="M2 12l10 5 10-5"/>
+          </svg>
+          <span class="logo-text">Excel解析器</span>
+        </div>
+        <nav class="nav">
+          <button class="nav-item active" data-section="upload">上传文件</button>
+          <button class="nav-item" data-section="data">数据预览</button>
+          <button class="nav-item" data-section="export">导出数据</button>
+        </nav>
+      </div>
+    </header>
+
+    <main class="main-content">
+      <section id="upload-section" class="section active">
+        <div class="upload-container">
+          <div class="upload-card">
+            <div class="upload-icon-wrapper">
+              <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+            </div>
+            <h2 class="upload-title">上传Excel文件</h2>
+            <p class="upload-description">支持 .xlsx、.xls、.csv 等主流格式，文件大小不超过 50MB</p>
+            
+            <div class="upload-area" id="uploadArea">
+              <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
+              <div class="upload-placeholder">
+                <svg class="placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <circle cx="8.5" cy="8.5" r="1.5"/>
+                  <polyline points="21 15 16 10 5 21"/>
+                </svg>
+                <p class="placeholder-text">拖拽文件到此处或点击选择</p>
+                <p class="placeholder-hint">支持 Excel (.xlsx, .xls) 和 CSV 文件</p>
+              </div>
+            </div>
+
+            <div class="file-info" id="fileInfo" style="display: none;">
+              <div class="file-info-content">
+                <svg class="file-info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                  <polyline points="10 9 9 9 8 9"/>
+                </svg>
+                <div class="file-info-text">
+                  <p class="file-name" id="fileName"></p>
+                  <p class="file-size" id="fileSize"></p>
+                </div>
+              </div>
+              <button class="btn-remove" id="btnRemove">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+
+            <div class="upload-progress" id="uploadProgress" style="display: none;">
+              <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+              </div>
+              <p class="progress-text" id="progressText">正在解析文件...</p>
+            </div>
+
+            <button class="btn-primary" id="btnParse" disabled>
+              <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 19V5"/>
+                <path d="M5 12l7-7 7 7"/>
+              </svg>
+              开始解析
+            </button>
+          </div>
+
+          <div class="features-grid">
+            <div class="feature-card">
+              <div class="feature-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+              </div>
+              <h3>高效解析</h3>
+              <p>支持多种Excel格式，快速准确提取数据</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
+                  <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                </svg>
+              </div>
+              <h3>数据安全</h3>
+              <p>本地解析，数据不上传服务器，保护隐私</p>
+            </div>
+            <div class="feature-card">
+              <div class="feature-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M19 11H5m14 0a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2m14 0V9a2 2 0 0 0-2-2M5 11V9a2 2 0 0 1 2-2m0 0V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2M7 7h10"/>
+                </svg>
+              </div>
+              <h3>多格式导出</h3>
+              <p>支持导出为JSON、CSV、TXT等格式</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="data-section" class="section">
+        <div class="data-container">
+          <div class="data-header">
+            <div class="data-title">
+              <h2>数据预览</h2>
+              <p id="sheetInfo">工作表: <span>未选择文件</span></p>
+            </div>
+            <div class="data-actions">
+              <select id="sheetSelector" class="select-sheet" disabled>
+                <option value="">选择工作表</option>
+              </select>
+              <button class="btn-secondary" id="btnRefresh" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <polyline points="1 20 1 14 7 14"/>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+                刷新
+              </button>
+            </div>
+          </div>
+
+          <div class="table-container" id="tableContainer">
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <line x1="9" y1="3" x2="9" y2="21"/>
+                <line x1="15" y1="3" x2="15" y2="21"/>
+              </svg>
+              <p>请先上传Excel文件以查看数据</p>
+            </div>
+          </div>
+
+          <div class="data-stats" id="dataStats" style="display: none;">
+            <div class="stat-item">
+              <span class="stat-value" id="rowCount">0</span>
+              <span class="stat-label">行数</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="colCount">0</span>
+              <span class="stat-label">列数</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-value" id="cellCount">0</span>
+              <span class="stat-label">单元格总数</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="export-section" class="section">
+        <div class="export-container">
+          <div class="export-card">
+            <h2>导出数据</h2>
+            <p>将解析的数据导出为您需要的格式</p>
+            
+            <div class="export-options">
+              <button class="export-option" id="btnExportJSON">
+                <div class="export-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                </div>
+                <div class="export-info">
+                  <h3>JSON 格式</h3>
+                  <p>结构化数据格式，适合编程处理</p>
+                </div>
+                <svg class="export-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </button>
+
+              <button class="export-option" id="btnExportCSV">
+                <div class="export-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="8" y1="13" x2="16" y2="13"/>
+                    <line x1="8" y1="17" x2="16" y2="17"/>
+                    <line x1="10" y1="9" x2="8" y2="9"/>
+                  </svg>
+                </div>
+                <div class="export-info">
+                  <h3>CSV 格式</h3>
+                  <p>通用表格格式，兼容各类电子表格软件</p>
+                </div>
+                <svg class="export-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </button>
+
+              <button class="export-option" id="btnExportTXT">
+                <div class="export-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                </div>
+                <div class="export-info">
+                  <h3>TXT 格式</h3>
+                  <p>纯文本格式，便于阅读和分享</p>
+                </div>
+                <svg class="export-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </button>
+            </div>
+
+            <div class="export-preview" id="exportPreview">
+              <h3>数据预览</h3>
+              <pre id="previewContent"></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Excel解析器 - 专业的数据处理工具</p>
+    </footer>
+  </div>
+
+  <div class="toast" id="toast">
+    <div class="toast-icon" id="toastIcon"></div>
+    <span class="toast-message" id="toastMessage"></span>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

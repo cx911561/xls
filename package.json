@@ -1,0 +1,17 @@
+{
+  "name": "excel-parser",
+  "version": "1.0.0",
+  "description": "一个功能完整、视觉精美的Excel文件解析网站",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "vite": "^5.2.0"
+  }
+}
