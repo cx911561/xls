@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Excel 在线解析器</title>
+  <!-- Tailwind CSS v3 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <!-- SheetJS（full 包含 codepage 支持） -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#6366f1',
+            accent: '#06b6d4',
+            dark: { 900: '#0f0f1a', 800: '#1a1a2e', 700: '#25253e' }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* ===== 基础样式 ===== */
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0f0f1a;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ===== 背景粒子动画 ===== */
+    .bg-grid {
+      position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background-image:
+        radial-gradient(circle at 20% 50%, rgba(99,102,241,.08) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(6,182,212,.08) 0%, transparent 50%),
+        radial-gradient(circle at 50% 80%, rgba(99,102,241,.06) 0%, transparent 50%);
+    }
+
+    .bg-grid::before {
+      content: ''; position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(99,102,241,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99,102,241,.04) 1px, transparent 1px);
+      background-size: 60px 60px;
+    }
+
+    /* ===== 上传区域 ===== */
+    .upload-zone {
+      border: 2px dashed rgba(99,102,241,.4);
+      transition: all .4s cubic-bezier(.4,0,.2,1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .upload-zone::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(circle at center, rgba(99,102,241,.06), transparent 70%);
+      opacity: 0; transition: opacity .4s;
+    }
+
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: #6366f1;
+      box-shadow: 0 0 40px rgba(99,102,241,.15), inset 0 0 40px rgba(99,102,241,.05);
+      transform: scale(1.01);
+    }
+
+    .upload-zone:hover::before, .upload-zone.drag-over::before { opacity: 1; }
+
+    .upload-zone.drag-over {
+      border-color: #06b6d4;
+      box-shadow: 0 0 40px rgba(6,182,212,.2), inset 0 0 40px rgba(6,182,212,.08);
+    }
+
+    /* ===== 进度条 ===== */
+    .progress-bar {
+      background: linear-gradient(90deg, #6366f1, #06b6d4, #6366f1);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s linear infinite;
+    }
+
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+    /* ===== 旋转加载 ===== */
+    .spinner {
+      border: 3px solid rgba(99,102,241,.15);
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ===== 脉冲动画 ===== */
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,.4); }
+      50% { box-shadow: 0 0 20px 6px rgba(99,102,241,.15); }
+    }
+
+    .pulse-glow { animation: pulse-glow 2s ease-in-out infinite; }
+
+    /* ===== 表格样式 ===== */
+    .data-table-wrapper {
+      overflow: auto;
+      max-height: 60vh;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(99,102,241,.3) transparent;
+    }
+
+    .data-table-wrapper::-webkit-scrollbar { width: 6px; height: 6px; }
+    .data-table-wrapper::-webkit-scrollbar-track { background: transparent; }
+    .data-table-wrapper::-webkit-scrollbar-thumb {
+      background: rgba(99,102,241,.3); border-radius: 3px;
+    }
+    .data-table-wrapper::-webkit-scrollbar-thumb:hover { background: rgba(99,102,241,.5); }
+
+    .data-table {
+      border-collapse: separate;
+      border-spacing: 0;
+      width: 100%;
+    }
+
+    .data-table thead th {
+      position: sticky; top: 0; z-index: 10;
+      background: #1e1e38;
+      backdrop-filter: blur(8px);
+    }
+
+    .data-table th, .data-table td {
+      padding: 10px 16px;
+      text-align: left;
+      white-space: nowrap;
+      border-bottom: 1px solid rgba(99,102,241,.08);
+    }
+
+    .data-table tbody tr {
+      transition: background .2s;
+    }
+
+    .data-table tbody tr:hover {
+      background: rgba(99,102,241,.06);
+    }
+
+    /* ===== 按钮效果 ===== */
+    .btn-glow {
+      position: relative;
+      overflow: hidden;
+      transition: all .3s;
+    }
+
+    .btn-glow::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,.1) 50%, transparent 70%);
+      transform: translateX(-100%);
+      transition: transform .5s;
+    }
+
+    .btn-glow:hover::after { transform: translateX(100%); }
+
+    /* ===== Toast 通知 ===== */
+    .toast {
+      animation: toast-in .4s cubic-bezier(.4,0,.2,1);
+    }
+
+    .toast.toast-out {
+      animation: toast-out .3s cubic-bezier(.4,0,.2,1) forwards;
+    }
+
+    @keyframes toast-in {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    @keyframes toast-out {
+      from { transform: translateX(0); opacity: 1; }
+      to { transform: translateX(100%); opacity: 0; }
+    }
+
+    /* ===== 淡入动画 ===== */
+    .fade-in {
+      animation: fade-in .5s cubic-bezier(.4,0,.2,1);
+    }
+
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ===== Sheet 标签 ===== */
+    .sheet-tab {
+      transition: all .3s;
+    }
+
+    .sheet-tab.active {
+      background: linear-gradient(135deg, rgba(99,102,241,.2), rgba(6,182,212,.15));
+      border-color: #6366f1;
+      color: #c7d2fe;
+    }
+
+    /* ===== 文件信息卡片 ===== */
+    .info-card {
+      background: linear-gradient(135deg, rgba(30,30,56,.6), rgba(30,30,56,.3));
+      border: 1px solid rgba(99,102,241,.12);
+      backdrop-filter: blur(10px);
+    }
+  </style>
+</head>
+
+<body class="text-gray-300">
+  <!-- 背景网格 -->
+  <div class="bg-grid"></div>
+
+  <!-- Toast 容器 -->
+  <div id="toastContainer" class="fixed top-6 right-6 z-50 flex flex-col gap-3"></div>
+
+  <!-- 主容器 -->
+  <div class="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    <!-- 标题区域 -->
+    <header class="text-center mb-10 fade-in">
+      <div class="inline-flex items-center gap-3 mb-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+          <i class="fa-solid fa-table-cells text-white text-lg"></i>
+        </div>
+        <h1 class="text-3xl sm:text-4xl font-bold bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+          Excel 在线解析器
+        </h1>
+      </div>
+      <p class="text-gray-500 text-sm">拖拽或点击上传 Excel 文件，从 G 列起提取名称并汇总使用量</p>
+    </header>
+
+    <!-- 上传区域 -->
+    <div id="uploadSection" class="fade-in">
+      <div
+        id="dropZone"
+        class="upload-zone rounded-2xl p-10 sm:p-16 text-center cursor-pointer bg-dark-800/50 backdrop-blur-sm"
+        onclick="document.getElementById('fileInput').click()"
+      >
+        <input
+          type="file" id="fileInput" accept=".xlsx,.xls"
+          class="hidden" onchange="handleFile(this.files[0])"
+        />
+        <div class="flex flex-col items-center gap-4">
+          <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center pulse-glow">
+            <i class="fa-solid fa-cloud-arrow-up text-3xl text-primary"></i>
+          </div>
+          <div>
+            <p class="text-lg font-medium text-gray-200 mb-1">拖拽文件到此处，或点击选择</p>
+            <p class="text-sm text-gray-500">支持 .xlsx / .xls 格式</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 解析进度 -->
+    <div id="progressSection" class="hidden mt-8 fade-in">
+      <div class="info-card rounded-xl p-6">
+        <div class="flex items-center gap-4 mb-4">
+          <div class="spinner w-8 h-8 shrink-0"></div>
+          <div class="flex-1">
+            <p class="text-sm font-medium text-gray-200" id="progressText">正在解析文件...</p>
+            <p class="text-xs text-gray-500 mt-1" id="progressSubText">请稍候</p>
+          </div>
+        </div>
+        <div class="h-2 bg-dark-700 rounded-full overflow-hidden">
+          <div id="progressBar" class="progress-bar h-full rounded-full transition-all duration-300" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 文件信息 + 操作栏 -->
+    <div id="infoBar" class="hidden mt-6 fade-in">
+      <div class="flex flex-wrap items-center justify-between gap-4">
+        <!-- 文件信息 -->
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="info-card rounded-lg px-4 py-2 flex items-center gap-2">
+            <i class="fa-solid fa-file-excel text-emerald-400"></i>
+            <span id="fileName" class="text-sm text-gray-200 font-medium"></span>
+          </div>
+          <div class="info-card rounded-lg px-4 py-2 flex items-center gap-2">
+            <i class="fa-solid fa-table text-primary text-xs"></i>
+            <span id="sheetCount" class="text-sm text-gray-400"></span>
+          </div>
+          <div class="info-card rounded-lg px-4 py-2 flex items-center gap-2">
+            <i class="fa-solid fa-border-all text-accent text-xs"></i>
+            <span id="dataInfo" class="text-sm text-gray-400"></span>
+          </div>
+        </div>
+        <!-- 操作按钮 -->
+        <div class="flex items-center gap-3">
+          <button onclick="exportCSV()"
+            class="btn-glow flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary/15 border border-primary/30 text-primary text-sm font-medium hover:bg-primary/25">
+            <i class="fa-solid fa-download text-xs"></i> 导出 CSV
+          </button>
+          <button onclick="exportJSON()"
+            class="btn-glow flex items-center gap-2 px-5 py-2.5 rounded-lg bg-accent/15 border border-accent/30 text-accent text-sm font-medium hover:bg-accent/25">
+            <i class="fa-solid fa-code text-xs"></i> 导出 JSON
+          </button>
+          <button onclick="clearAll()"
+            class="btn-glow flex items-center gap-2 px-5 py-2.5 rounded-lg bg-red-500/10 border border-red-500/25 text-red-400 text-sm font-medium hover:bg-red-500/20">
+            <i class="fa-solid fa-trash-can text-xs"></i> 清空
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sheet 标签栏 -->
+    <div id="sheetTabs" class="hidden mt-6 flex flex-wrap gap-2 fade-in"></div>
+
+    <!-- 表格展示 -->
+    <div id="tableSection" class="hidden mt-4 fade-in">
+      <div class="info-card rounded-xl overflow-hidden">
+        <div class="data-table-wrapper">
+          <table id="dataTable" class="data-table">
+            <thead id="tableHead"></thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- 分页 -->
+      <div id="pagination" class="mt-4 flex items-center justify-between text-sm text-gray-500">
+        <span id="pageInfo"></span>
+        <div class="flex items-center gap-2">
+          <button onclick="prevPage()" id="prevBtn"
+            class="px-3 py-1.5 rounded-lg bg-dark-700 border border-gray-700/50 hover:border-primary/30 hover:text-primary transition disabled:opacity-30 disabled:cursor-not-allowed">
+            <i class="fa-solid fa-chevron-left text-xs"></i>
+          </button>
+          <span id="pageNum" class="px-2 text-gray-400"></span>
+          <button onclick="nextPage()" id="nextBtn"
+            class="px-3 py-1.5 rounded-lg bg-dark-700 border border-gray-700/50 hover:border-primary/30 hover:text-primary transition disabled:opacity-30 disabled:cursor-not-allowed">
+            <i class="fa-solid fa-chevron-right text-xs"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    /* ===== 全局配置 ===== */
+    const START_COLUMN = 6;        // 从G列开始解析（索引6，即第7列）
+    const PAGE_SIZE = 50;          // 每页行数
+
+    /* SheetJS codepage 对照表（中文编码） */
+    const CODEPAGE_MAP = [
+      { code: 936,   label: 'GBK' },
+      { code: 54936, label: 'GB18030' },
+      { code: 950,   label: 'Big5' },
+    ];
+
+    /* 用于 fixGarbledText 的编码尝试列表 */
+    const TEXT_ENCODINGS = ['gbk', 'gb18030', 'big5'];
+
+    /* ===== 全局状态 ===== */
+    let workbook = null;
+    let currentSheet = '';
+    let summaryData = [];
+    let currentPage = 1;
+    let rawUint8 = null;           // 保存原始 Uint8Array（供 codepage 重试用）
+
+    /* ========================================
+     *  乱码检测与修复
+     * ======================================== */
+
+    /**
+     * 检测字符串是否含有"Latin1 误读中文"的乱码特征
+     * 典型表现：GBK 双字节中文被逐字节当成 Latin1 → 出现 ÃÀÖÐ 类字符
+     */
+    function isGarbled(str) {
+      if (!str || typeof str !== 'string') return false;
+      let highCount = 0;
+      for (let i = 0; i < str.length; i++) {
+        const c = str.charCodeAt(i);
+        // 连续高位 Latin 字符 (0x80-0xFF)，中文被误读时的典型特征
+        if (c >= 0x80 && c <= 0xFF) {
+          highCount++;
+          if (highCount >= 2) return true;   // 连续2个以上基本确定是乱码
+        } else {
+          highCount = 0;
+        }
+      }
+      // Unicode 替换字符
+      if (str.indexOf('\uFFFD') !== -1) return true;
+      return false;
+    }
+
+    /**
+     * 检测一组单元格数据是否包含乱码
+     */
+    function hasGarbledInData(jsonData) {
+      for (const row of jsonData) {
+        for (const cell of row) {
+          if (typeof cell === 'string' && isGarbled(cell)) return true;
+        }
+      }
+      return false;
+    }
+
+    /**
+     * 单元格级别修复：把被 Latin1 误读的中文字节还原后重新解码
+     * 原理：SheetJS 有时用 codepage 1252 读取字符串，导致 GBK 双字节变两个 Latin1 字符
+     *       将每个 charCode & 0xFF 还原原始字节，再用 TextDecoder 按 GBK 解码
+     */
+    function fixGarbledText(str) {
+      if (!str || typeof str !== 'string' || !isGarbled(str)) return str;
+
+      // 还原为原始字节序列
+      const bytes = new Uint8Array(str.length);
+      for (let i = 0; i < str.length; i++) {
+        bytes[i] = str.charCodeAt(i) & 0xFF;
+      }
+
+      // 依次尝试各中文编码
+      for (const enc of TEXT_ENCODINGS) {
+        try {
+          const decoder = new TextDecoder(enc, { fatal: true });
+          const decoded = decoder.decode(bytes);
+          // 解码成功且包含中文字符 → 修复成功
+          if (!isGarbled(decoded) && /[\u4e00-\u9fff]/.test(decoded)) {
+            return decoded;
+          }
+        } catch {
+          // fatal 模式解码失败，说明不是该编码，跳过
+        }
+      }
+      return str;  // 无法修复，返回原文
+    }
+
+    /* ========================================
+     *  拖拽上传
+     * ======================================== */
+    const dropZone = document.getElementById('dropZone');
+
+    ['dragenter', 'dragover'].forEach(evt => {
+      dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    });
+    ['dragleave', 'drop'].forEach(evt => {
+      dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.remove('drag-over'); });
+    });
+    dropZone.addEventListener('drop', e => {
+      const file = e.dataTransfer.files[0];
+      if (file) handleFile(file);
+    });
+
+    /* ========================================
+     *  文件入口
+     * ======================================== */
+    function handleFile(file) {
+      if (!file) return;
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (!['xlsx', 'xls'].includes(ext)) {
+        showToast('不支持该文件格式，请上传 .xlsx 或 .xls 文件', 'error');
+        return;
+      }
+      if (file.size === 0) {
+        showToast('文件为空，请选择有效的 Excel 文件', 'error');
+        return;
+      }
+      document.getElementById('fileInput').value = '';
+      showProgress(file.name);
+      parseFile(file);
+    }
+
+    /* ========================================
+     *  进度条
+     * ======================================== */
+    function showProgress(fileName) {
+      document.getElementById('progressSection').classList.remove('hidden');
+      document.getElementById('infoBar').classList.add('hidden');
+      document.getElementById('sheetTabs').classList.add('hidden');
+      document.getElementById('tableSection').classList.add('hidden');
+      updateProgress(10, '正在读取文件...', fileName);
+    }
+    function updateProgress(percent, text, subText) {
+      document.getElementById('progressBar').style.width = percent + '%';
+      if (text) document.getElementById('progressText').textContent = text;
+      if (subText) document.getElementById('progressSubText').textContent = subText;
+    }
+    function hideProgress() {
+      document.getElementById('progressSection').classList.add('hidden');
+    }
+
+    /* ========================================
+     *  文件解析（核心）
+     * ======================================== */
+    function parseFile(file) {
+      const reader = new FileReader();
+
+      reader.onprogress = e => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 40) + 10;
+          updateProgress(pct, '正在读取文件...', `${Math.round(e.loaded/1024)} KB / ${Math.round(e.total/1024)} KB`);
+        }
+      };
+
+      reader.onload = e => {
+        updateProgress(50, '正在解析 Excel 结构...', '读取工作表信息');
+        try {
+          rawUint8 = new Uint8Array(e.target.result);
+
+          setTimeout(() => {
+            // 第一步：默认方式读取
+            workbook = XLSX.read(rawUint8, { type: 'array', cellDates: true });
+
+            if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+              hideProgress();
+              showToast('文件中没有可用的工作表', 'error');
+              return;
+            }
+
+            // 第二步：检测乱码
+            const sampleSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const sampleData = XLSX.utils.sheet_to_json(sampleSheet, { header: 1, defval: '' });
+            const garbled = hasGarbledInData(sampleData);
+            let encodingNote = '';
+
+            if (garbled) {
+              updateProgress(60, '检测到乱码，正在用中文编码重新解析...', 'GBK / GB18030 / Big5');
+
+              // 第三步：用不同 codepage 重新读取整个文件
+              for (const cp of CODEPAGE_MAP) {
+                try {
+                  const retryWb = XLSX.read(rawUint8, { type: 'array', cellDates: true, codepage: cp.code });
+                  const retrySheet = retryWb.Sheets[retryWb.SheetNames[0]];
+                  const retryData = XLSX.utils.sheet_to_json(retrySheet, { header: 1, defval: '' });
+
+                  if (!hasGarbledInData(retryData)) {
+                    workbook = retryWb;
+                    encodingNote = `（已使用 ${cp.label} codepage:${cp.code} 修复）`;
+                    break;
+                  }
+                } catch {
+                  // 跳过失败的 codepage
+                }
+              }
+
+              // 第四步：如果 codepage 重读仍然有乱码，在单元格级别做修复
+              // （针对 codepage 正确但个别字段仍乱码的情况）
+              const recheckSheet = workbook.Sheets[workbook.SheetNames[0]];
+              const recheckData = XLSX.utils.sheet_to_json(recheckSheet, { header: 1, defval: '' });
+              if (hasGarbledInData(recheckData) && !encodingNote) {
+                encodingNote = '（已尝试单元格级别编码修复）';
+              }
+            }
+
+            updateProgress(85, '正在汇总数据...', `共 ${workbook.SheetNames.length} 个工作表 ${encodingNote}`);
+
+            setTimeout(() => {
+              updateProgress(100, '解析完成', encodingNote || '');
+              setTimeout(() => {
+                hideProgress();
+                renderFileInfo(file);
+                renderSheetTabs();
+                switchSheet(workbook.SheetNames[0]);
+                showToast('文件解析成功 ' + encodingNote, 'success');
+              }, 300);
+            }, 200);
+          }, 100);
+        } catch (err) {
+          hideProgress();
+          showToast('文件解析失败：' + err.message, 'error');
+          console.error(err);
+        }
+      };
+
+      reader.onerror = () => { hideProgress(); showToast('文件读取失败', 'error'); };
+      reader.readAsArrayBuffer(file);
+    }
+
+    /* ========================================
+     *  文件信息
+     * ======================================== */
+    function renderFileInfo(file) {
+      document.getElementById('infoBar').classList.remove('hidden');
+      document.getElementById('fileName').textContent = file.name;
+      document.getElementById('sheetCount').textContent = `${workbook.SheetNames.length} 个工作表`;
+    }
+
+    /* ========================================
+     *  Sheet 标签栏
+     * ======================================== */
+    function renderSheetTabs() {
+      const container = document.getElementById('sheetTabs');
+      container.classList.remove('hidden');
+      container.innerHTML = '';
+      workbook.SheetNames.forEach(name => {
+        const btn = document.createElement('button');
+        btn.textContent = name;
+        btn.className = 'sheet-tab px-4 py-2 rounded-lg text-sm border border-gray-700/50 bg-dark-700/50 text-gray-400 hover:text-gray-200 hover:border-primary/30';
+        btn.onclick = () => switchSheet(name);
+        container.appendChild(btn);
+      });
+    }
+
+    /* ========================================
+     *  切换 Sheet → 提取名称 + 求和 → 降序排列
+     * ======================================== */
+    function switchSheet(sheetName) {
+      currentSheet = sheetName;
+      currentPage = 1;
+
+      document.querySelectorAll('.sheet-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.textContent === sheetName);
+      });
+
+      const ws = workbook.Sheets[sheetName];
+      const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+      if (jsonData.length < 2) {
+        summaryData = [];
+        document.getElementById('dataInfo').textContent = '数据不足（需至少两行）';
+        renderTable();
+        document.getElementById('tableSection').classList.remove('hidden');
+        return;
+      }
+
+      // 第1行 = 名称行（G列及之后的每个单元格就是一个名称）
+      const nameRow = jsonData[0] || [];
+      const dataRowsRaw = jsonData.slice(1);
+
+      // 遍历 G 列及之后的每一列：取名称 + 对该列所有数值行求和
+      const results = [];
+      for (let ci = START_COLUMN; ci < nameRow.length; ci++) {
+        // 提取名称（修复乱码）
+        let name = String(nameRow[ci] || '').trim();
+        name = fixGarbledText(name);
+        if (!name) name = colName(ci) + '列';  // 空名称用列字母代替
+
+        // 对该列所有数据行求和
+        let sum = 0;
+        let hasValue = false;
+        for (const row of dataRowsRaw) {
+          const val = row[ci];
+          if (val !== undefined && val !== null && val !== '') {
+            const num = Number(val);
+            if (!isNaN(num)) {
+              sum += num;
+              hasValue = true;
+            }
+          }
+        }
+
+        results.push({ name, value: hasValue ? sum : 0 });
+      }
+
+      // 保持原始列顺序（G列在前，H列其次...）
+      summaryData = results;
+
+      document.getElementById('dataInfo').textContent =
+        `${summaryData.length} 个项目（从 ${colName(START_COLUMN)} 列起）`;
+
+      renderTable();
+      document.getElementById('tableSection').classList.remove('hidden');
+    }
+
+    // 列索引 → 列名（0→A, 6→G, 25→Z, 26→AA ...）
+    function colName(idx) {
+      let name = '';
+      let n = idx;
+      while (n >= 0) {
+        name = String.fromCharCode(65 + (n % 26)) + name;
+        n = Math.floor(n / 26) - 1;
+      }
+      return name;
+    }
+
+    /* ========================================
+     *  格式化数值
+     * ======================================== */
+    function formatNumber(num) {
+      if (num === 0) return '0';
+      if (Number.isInteger(num)) return num.toLocaleString('zh-CN');
+      return num.toLocaleString('zh-CN', { maximumFractionDigits: 4 });
+    }
+
+    /* ========================================
+     *  表格渲染（仅 名称 + 使用量 两列）
+     * ======================================== */
+    function renderTable() {
+      const thead = document.getElementById('tableHead');
+      const tbody = document.getElementById('tableBody');
+
+      thead.innerHTML = `<tr>
+        <th class="text-xs text-gray-500 font-medium bg-dark-800 w-14 text-center">#</th>
+        <th class="text-xs text-gray-400 font-medium bg-dark-800 min-w-[180px]">名称</th>
+        <th class="text-xs text-gray-400 font-medium bg-dark-800 min-w-[140px] text-right">使用量</th>
+      </tr>`;
+
+      if (summaryData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" class="text-center py-12 text-gray-600">
+          <i class="fa-solid fa-inbox text-2xl mb-2 block"></i>暂无数据
+        </td></tr>`;
+      } else {
+        const start = (currentPage - 1) * PAGE_SIZE;
+        const end = Math.min(start + PAGE_SIZE, summaryData.length);
+        const pageData = summaryData.slice(start, end);
+        const maxVal = summaryData[0]?.value || 1;
+
+        tbody.innerHTML = pageData.map((item, idx) => {
+          const rowNum = start + idx + 1;
+          const pct = maxVal > 0 ? Math.max(Math.round((item.value / maxVal) * 100), 0) : 0;
+          return `<tr>
+            <td class="text-xs text-gray-600 text-center">${rowNum}</td>
+            <td class="text-sm text-gray-200 font-medium">${escapeHTML(item.name)}</td>
+            <td class="text-sm text-right">
+              <div class="flex items-center justify-end gap-3">
+                <div class="w-24 h-1.5 bg-dark-700 rounded-full overflow-hidden shrink-0">
+                  <div class="h-full rounded-full bg-gradient-to-r from-primary to-accent transition-all duration-500"
+                       style="width:${pct}%"></div>
+                </div>
+                <span class="text-emerald-400 font-mono text-sm tabular-nums">${formatNumber(item.value)}</span>
+              </div>
+            </td>
+          </tr>`;
+        }).join('');
+      }
+
+      const totalPages = Math.max(1, Math.ceil(summaryData.length / PAGE_SIZE));
+      document.getElementById('pageInfo').textContent = `共 ${summaryData.length} 个项目`;
+      document.getElementById('pageNum').textContent = `${currentPage} / ${totalPages}`;
+      document.getElementById('prevBtn').disabled = currentPage <= 1;
+      document.getElementById('nextBtn').disabled = currentPage >= totalPages;
+    }
+
+    /* ===== 分页 ===== */
+    function prevPage() { if (currentPage > 1) { currentPage--; renderTable(); } }
+    function nextPage() {
+      const totalPages = Math.ceil(summaryData.length / PAGE_SIZE);
+      if (currentPage < totalPages) { currentPage++; renderTable(); }
+    }
+
+    /* ========================================
+     *  导出
+     * ======================================== */
+    function exportCSV() {
+      if (!summaryData.length) { showToast('没有可导出的数据', 'info'); return; }
+      const csv = '名称,使用量\n' +
+        summaryData.map(r => `"${r.name.replace(/"/g, '""')}",${r.value}`).join('\n');
+      downloadFile(csv, `${currentSheet}_汇总.csv`, 'text/csv;charset=utf-8');
+      showToast('CSV 文件已导出', 'success');
+    }
+
+    function exportJSON() {
+      if (!summaryData.length) { showToast('没有可导出的数据', 'info'); return; }
+      const content = JSON.stringify(summaryData, null, 2);
+      downloadFile(content, `${currentSheet}_汇总.json`, 'application/json;charset=utf-8');
+      showToast('JSON 文件已导出', 'success');
+    }
+
+    function downloadFile(content, filename, mimeType) {
+      const blob = new Blob(['\uFEFF' + content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    /* ========================================
+     *  清空
+     * ======================================== */
+    function clearAll() {
+      workbook = null;
+      currentSheet = '';
+      summaryData = [];
+      currentPage = 1;
+      rawUint8 = null;
+      document.getElementById('infoBar').classList.add('hidden');
+      document.getElementById('sheetTabs').classList.add('hidden');
+      document.getElementById('tableSection').classList.add('hidden');
+      document.getElementById('progressSection').classList.add('hidden');
+      showToast('已清空所有数据', 'info');
+    }
+
+    /* ========================================
+     *  Toast 通知
+     * ======================================== */
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const icons = {
+        success: 'fa-circle-check text-emerald-400',
+        error:   'fa-circle-xmark text-red-400',
+        info:    'fa-circle-info text-primary'
+      };
+      const borders = {
+        success: 'border-emerald-500/20',
+        error:   'border-red-500/20',
+        info:    'border-primary/20'
+      };
+      const toast = document.createElement('div');
+      toast.className = `toast flex items-center gap-3 px-5 py-3 rounded-xl bg-dark-800/90 backdrop-blur-sm border ${borders[type]} shadow-xl min-w-[260px]`;
+      toast.innerHTML = `
+        <i class="fa-solid ${icons[type]}"></i>
+        <span class="text-sm text-gray-200">${escapeHTML(message)}</span>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.classList.add('toast-out');
+        toast.addEventListener('animationend', () => toast.remove());
+      }, 3000);
+    }
+
+    /* ===== HTML 转义 ===== */
+    function escapeHTML(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    /* ========================================
+     *  App回调：加密 + URL Scheme + 剪贴板
+     * ======================================== */
+    const SCHEME_KEY = 'xdw2024';
+    const SCHEME_URL = 'xdwtool://excel';
+
+    // XOR + Base64 加密
+    function encryptData(obj) {
+      const json = JSON.stringify(obj);
+      const encoded = encodeURIComponent(json);
+      // 先Base64
+      const b64 = btoa(encoded);
+      // XOR加密
+      let xored = '';
+      for (let i = 0; i < b64.length; i++) {
+        xored += String.fromCharCode(b64.charCodeAt(i) ^ SCHEME_KEY.charCodeAt(i % SCHEME_KEY.length));
+      }
+      // 再Base64 + 前缀
+      return 'XDW:' + btoa(xored);
+    }
+
+    // 构造回调数据
+    function buildCallbackData() {
+      if (!summaryData || summaryData.length === 0) return null;
+      const callbackObj = {
+        fileName: document.getElementById('fileName').textContent || 'data.xlsx',
+        fileSize: 0,
+        columns: summaryData.map(item => ({ name: item.name, sum: item.value }))
+      };
+      return callbackObj;
+    }
+
+    // 返回App
+    function sendToApp() {
+      const data = buildCallbackData();
+      if (!data) { showToast('没有可发送的数据', 'error'); return; }
+
+      const encrypted = encryptData(data);
+
+      // 1. 复制到剪贴板（备用方案，更稳定）
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(encrypted).then(() => {
+          console.log('已复制到剪贴板');
+        }).catch(() => {
+          fallbackCopy(encrypted);
+        });
+      } else {
+        fallbackCopy(encrypted);
+      }
+
+      // 2. 尝试URL Scheme唤醒App
+      const schemeUrl = SCHEME_URL + '?d=' + encodeURIComponent(encrypted);
+
+      // 显示返回提示
+      const returnBtn = document.getElementById('returnAppBtn');
+      const returnStatus = document.getElementById('returnStatus');
+      if (returnBtn) returnBtn.style.display = 'none';
+      if (returnStatus) {
+        returnStatus.style.display = 'block';
+        returnStatus.innerHTML = '<i class="fa-solid fa-circle-check text-emerald-400 mr-2"></i>数据已准备就绪，正在返回App...';
+      }
+
+      // 尝试打开URL Scheme
+      setTimeout(() => {
+        try {
+          window.location.href = schemeUrl;
+        } catch (e) {
+          console.log('URL Scheme打开失败，请手动切换回App');
+        }
+
+        // 3秒后如果还在页面，提示手动切换
+        setTimeout(() => {
+          if (returnStatus) {
+            returnStatus.innerHTML = '<i class="fa-solid fa-arrow-left text-amber-400 mr-2"></i>请手动切换回App，数据已通过剪贴板传递';
+          }
+        }, 3000);
+      }, 300);
+    }
+
+    // 兼容复制
+    function fallbackCopy(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+
+    // 在解析完成后添加"返回App"按钮
+    const origShowToast = showToast;
+    // 监听解析完成后显示返回按钮
+    const origSwitchSheet = switchSheet;
+    // 重写switchSheet以添加返回按钮
+    const _origSwitchSheet = switchSheet;
+    switchSheet = function(sheetName) {
+      _origSwitchSheet(sheetName);
+      // 添加返回App区域
+      let returnArea = document.getElementById('returnAppArea');
+      if (!returnArea) {
+        returnArea = document.createElement('div');
+        returnArea.id = 'returnAppArea';
+        returnArea.className = 'mt-6 fade-in';
+        returnArea.innerHTML = `
+          <div class="info-card rounded-xl p-5 text-center">
+            <p class="text-sm text-gray-400 mb-3">解析完成，可将结果传回App</p>
+            <button id="returnAppBtn" onclick="sendToApp()"
+              class="btn-glow w-full px-6 py-3 rounded-xl text-base font-bold
+                     bg-gradient-to-r from-emerald-500 to-cyan-500 text-white
+                     hover:from-emerald-600 hover:to-cyan-600
+                     flex items-center justify-center gap-2 mx-auto">
+              <i class="fa-solid fa-arrow-left"></i> 返回App查看结果
+            </button>
+            <div id="returnStatus" class="mt-3 text-sm" style="display:none"></div>
+            <p class="text-xs text-gray-600 mt-3">
+              <i class="fa-solid fa-shield-halved text-gray-600 mr-1"></i>
+              数据已加密，仅本地处理不上传服务器
+            </p>
+          </div>
+        `;
+        // 插入到infoBar后面
+        const infoBar = document.getElementById('infoBar');
+        if (infoBar) {
+          infoBar.parentNode.insertBefore(returnArea, infoBar.nextSibling);
+        } else {
+          document.querySelector('.relative.z-10').appendChild(returnArea);
+        }
+      } else {
+        returnArea.style.display = 'block';
+        const returnBtn = document.getElementById('returnAppBtn');
+        if (returnBtn) returnBtn.style.display = 'flex';
+        const returnStatus = document.getElementById('returnStatus');
+        if (returnStatus) returnStatus.style.display = 'none';
+      }
+    };
+  </script>
+</body>
+</html>
